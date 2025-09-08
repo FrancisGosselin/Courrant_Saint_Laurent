@@ -50,12 +50,9 @@ vec2 to_canvas_coord(vec2 normalized_coord) {
     );
 }
 
-// current speed lookup; use manual bilinear filtering based on 4 adjacent pixels for smooth interpolation
-vec2 lookup_wind(const vec2 uv) {
-    // Convert longitude (linear) and latitude (Web Mercator inverse) to geographic coordinates
-    float lng = uv.x * 360.0 - 180.0;  // 0-1 -> -180 to 180
-    float lat = yToLatitude(uv.y);     // 0-1 -> -90 to 90 using inverse Web Mercator
-    
+// current speed lookup; returns normalized velocity (0-1 range) before scaling
+vec2 lookup_wind_normalized(const vec2 uv) {
+
     // Get data bounds
     float minLng = u_data_bounds.x;
     float minLat = u_data_bounds.y;
@@ -72,26 +69,17 @@ vec2 lookup_wind(const vec2 uv) {
     float pixelX = ( particuleCanvasCoord.x - minCoords.x) / (maxCoords.x - minCoords.x);
     float pixelY = ( particuleCanvasCoord.y - minCoords.y) / (maxCoords.y - minCoords.y);
     
-    // Check bounds
+    // Check bounds. It assume 0.0 is contained within u_wind_min and u_wind_max
     if (pixelX < 0.0 || pixelX >= u_wind_res.x || pixelY < 0.0 || pixelY >= u_wind_res.y) {
-        return vec2(0.0, 0.0); // No current data outside bounds
+        return vec2((0. - u_wind_min) / (u_wind_max - u_wind_min)); // No current data outside bounds
     }
     
     vec2 tex_coord = vec2(pixelX , pixelY );
     
-    // Bilinear filtering
-    // vec2 px = 1.0 / u_wind_res;
-    // vec2 vc = (floor(tex_coord * u_wind_res)) * px;
-    // vec2 f = fract(tex_coord * u_wind_res);
-    // vec2 tl = texture2D(u_wind, vc).rg;
-    // vec2 tr = texture2D(u_wind, vc + vec2(px.x, 0)).rg;
-    // vec2 bl = texture2D(u_wind, vc + vec2(0, px.y)).rg;
-    // vec2 br = texture2D(u_wind, vc + px).rg;
-    // vec2 velocity = mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y);
-
+    // Return the normalized texture values (0-1 range) directly, the result will be scaled back to u_wind_min and u_wind_max in the updatePosition
     vec2 velocity = texture2D(u_wind, tex_coord).rg;
-    // Reverse min_max scaling operation
-    return mix(u_wind_min, u_wind_max, velocity);
+
+    return velocity;
 }
 
 void main() {
@@ -100,35 +88,10 @@ void main() {
         color.r / 255.0 + color.b,
         color.g / 255.0 + color.a); // decode particle position from pixel RGBA
 
+    vec2 velocity_normalized = lookup_wind_normalized(pos);
 
-    vec2 velocity = lookup_wind(pos);
-    float speed_t = length(velocity) / length(u_wind_max);
-
-    // take EPSG:4236 distortion into account for calculating where the particle moved
-    // float distortion = cos(radians(pos.y * 180.0 - 90.0));
-    // vec2 offset = vec2(velocity.x / distortion, -velocity.y) * 0.0001 * u_speed_factor;
-
-    vec2 offset = vec2(velocity.x, -velocity.y) * 0.001 * u_speed_factor;
-
-    // update particle position, wrapping around the date line
-    pos = fract(1.0 + pos + offset);
-
-    // a random seed to use for the particle drop
-    vec2 seed = (pos + v_tex_pos) * u_rand_seed;
-
-    // drop rate is a chance a particle will restart at random position, to avoid degeneration
-    float drop_rate = u_drop_rate + speed_t * u_drop_rate_bump;
-    float drop = step(1.0 - drop_rate, rand(seed));
-
-
-    vec2 random_pos =  vec2(rand(seed + 1.3), rand(seed + 2.1));
-    // vec2 random_pos = vec2(
-    //     mix(min_x, max_x, rand(seed + 1.3)),
-    //     mix(min_y, max_y, rand(seed + 2.1)));
-    pos = mix(pos, random_pos, drop);
-
-    // encode the new particle position back into RGBA
+    // encode the normalized velocity vector into RGBA - using same encoding pattern as position
     gl_FragColor = vec4(
-        fract(pos * 255.0),
-        floor(pos * 255.0) / 255.0);
+        fract(velocity_normalized * 255.0),
+        floor(velocity_normalized * 255.0) / 255.0);
 }

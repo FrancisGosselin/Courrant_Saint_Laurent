@@ -29,7 +29,7 @@ class WindGLLayer {
     this.windGL = new WindGL(gl);
     
     // Configure WindGL parameters - increased particle count since no trails
-    this.windGL.numParticles = 50000; // Higher particle count for better coverage
+    this.windGL.numParticles = 10000; // Higher particle count for better coverage
     this.windGL.fadeOpacity = 0.985; // Not used without trails, but keep for consistency
     this.windGL.speedFactor = 0.12; // Slower, more visible movement
     this.windGL.dropRate = 0.002; // Moderate particle respawn
@@ -358,8 +358,8 @@ const WorldMapWindGL: React.FC = () => {
         // Calculate bounds from metadata
         const minLng = metadata.minLong;
         const minLat = metadata.minLat;
-        const maxLng = minLng + (metadata.width * metadata.longPerPixel);
-        const maxLat = minLat + (metadata.height * metadata.latPerPixel);
+        const maxLng = metadata.maxLong;
+        const maxLat = metadata.maxLat;
         
         // Add raster source for current data (using processed image)
         map.addSource('current-data', {

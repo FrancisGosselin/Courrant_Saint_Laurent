@@ -7,7 +7,8 @@ import drawFrag from './shaders/draw.frag.glsl?raw';
 import quadVert from './shaders/quad.vert.glsl?raw';
 
 import screenFrag from './shaders/screen.frag.glsl?raw';
-import updateFrag from './shaders/update.frag.glsl?raw';
+import updateSpeedFrag from './shaders/updateSpeed.frag.glsl?raw';
+import updatePositionFrag from './shaders/updatePosition.frag.glsl?raw';
 
 const defaultRampColors = {
     0.0: '#3288bd',
@@ -33,7 +34,8 @@ export default class WindGL {
 
         this.drawProgram = util.createProgram(gl, drawVert, drawFrag);
         this.screenProgram = util.createProgram(gl, quadVert, screenFrag);
-        this.updateProgram = util.createProgram(gl, quadVert, updateFrag);
+        this.updateSpeedProgram = util.createProgram(gl, quadVert, updateSpeedFrag);
+        this.updatePositionProgram = util.createProgram(gl, quadVert, updatePositionFrag);
 
         this.quadBuffer = util.createBuffer(gl, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]));
         this.framebuffer = gl.createFramebuffer();
@@ -67,12 +69,23 @@ export default class WindGL {
         this._numParticles = particleRes * particleRes;
 
         const particleState = new Uint8Array(this._numParticles * 4);
+        const particleSpeed = new Uint8Array(this._numParticles * 4);
+        
         for (let i = 0; i < particleState.length; i++) {
             particleState[i] = Math.floor(Math.random() * 256); // randomize the initial particle positions
         }
+        
+        for (let i = 0; i < particleSpeed.length; i++) {
+            particleSpeed[i] = 0; // initialize speed to 0
+        }
+        
         // textures to hold the particle state for the current and the next frame
         this.particleStateTexture0 = util.createTexture(gl, gl.NEAREST, particleState, particleRes, particleRes);
         this.particleStateTexture1 = util.createTexture(gl, gl.NEAREST, particleState, particleRes, particleRes);
+        
+        // textures to hold the particle speed for the current and the next frame
+        this.particleSpeedTexture0 = util.createTexture(gl, gl.NEAREST, particleSpeed, particleRes, particleRes);
+        this.particleSpeedTexture1 = util.createTexture(gl, gl.NEAREST, particleSpeed, particleRes, particleRes);
 
         const particleIndices = new Float32Array(this._numParticles);
         for (let i = 0; i < this._numParticles; i++) particleIndices[i] = i;
@@ -104,16 +117,22 @@ export default class WindGL {
     resetParticles() {
         const gl = this.gl;
         
-        if (!this.particleStateTexture0 || !this.particleStateTexture1) {
+        if (!this.particleStateTexture0 || !this.particleStateTexture1 || !this.particleSpeedTexture0 || !this.particleSpeedTexture1) {
             return;
         }
 
         const particleRes = this.particleStateResolution;
         const numParticles = particleRes * particleRes;
         const particleState = new Uint8Array(numParticles * 4);
+        const particleSpeed = new Uint8Array(numParticles * 4);
         
         for (let i = 0; i < particleState.length; i++) {
             particleState[i] = Math.floor(Math.random() * 256);
+        }
+        
+        // Initialize speed to 0
+        for (let i = 0; i < particleSpeed.length; i++) {
+            particleSpeed[i] = 0;
         }
         
         // Update both particle state textures with new random positions
@@ -122,6 +141,13 @@ export default class WindGL {
         
         gl.bindTexture(gl.TEXTURE_2D, this.particleStateTexture1);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, particleRes, particleRes, gl.RGBA, gl.UNSIGNED_BYTE, particleState);
+        
+        // Update both particle speed textures with zero speed
+        gl.bindTexture(gl.TEXTURE_2D, this.particleSpeedTexture0);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, particleRes, particleRes, gl.RGBA, gl.UNSIGNED_BYTE, particleSpeed);
+        
+        gl.bindTexture(gl.TEXTURE_2D, this.particleSpeedTexture1);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, particleRes, particleRes, gl.RGBA, gl.UNSIGNED_BYTE, particleSpeed);
         
         gl.bindTexture(gl.TEXTURE_2D, null);
         
@@ -163,9 +189,11 @@ export default class WindGL {
 
         util.bindTexture(gl, this.windTexture, 0);
         util.bindTexture(gl, this.particleStateTexture0, 1);
+        util.bindTexture(gl, this.particleSpeedTexture0, 3);
 
         this.drawScreen();
-        this.updateParticles();
+        this.updateParticlePosition();
+        this.updateParticleSpeed();
     }
 
     drawScreen() {
@@ -201,6 +229,7 @@ export default class WindGL {
         gl.uniform1i(program.u_wind, 0);
         gl.uniform1i(program.u_particles, 1);
         gl.uniform1i(program.u_color_ramp, 2);
+        gl.uniform1i(program.u_particle_speed, 3);
 
         gl.uniform1f(program.u_particles_res, this.particleStateResolution);
         gl.uniform2f(program.u_wind_res, this.windData.width, this.windData.height);
@@ -244,18 +273,59 @@ export default class WindGL {
         gl.drawArrays(gl.POINTS, 0, this._numParticles);
     }
 
-    updateParticles() {
+    updateParticleSpeed() {
         const gl = this.gl;
-        util.bindFramebuffer(gl, this.framebuffer, this.particleStateTexture1);
+        util.bindFramebuffer(gl, this.framebuffer, this.particleSpeedTexture1);
         gl.viewport(0, 0, this.particleStateResolution, this.particleStateResolution);
 
-        const program = this.updateProgram;
+        const program = this.updateSpeedProgram;
         gl.useProgram(program.program);
 
         util.bindAttribute(gl, this.quadBuffer, program.a_pos, 2);
 
         gl.uniform1i(program.u_wind, 0);
         gl.uniform1i(program.u_particles, 1);
+
+        gl.uniform2f(program.u_wind_res, this.windData.width, this.windData.height);
+        gl.uniform2f(program.u_wind_min, this.windData.uMin, this.windData.vMin);
+        gl.uniform2f(program.u_wind_max, this.windData.uMax, this.windData.vMax);
+        
+        // Pass data bounds for current data mapping
+        if (this.windData && program.u_data_bounds) {
+            gl.uniform4f(program.u_data_bounds,
+                this.windData.minLong || -180,     // minLong
+                this.windData.minLat || -90,       // minLat
+                this.windData.longPerPixel || 1,   // longPerPixel
+                this.windData.latPerPixel || 1     // latPerPixel
+            );
+        }
+        
+        // Pass normalized viewport bounds for particle spawning
+        if (this.normalizedBounds && program.u_viewport_normalized_bounds) {
+            gl.uniform4f(program.u_viewport_normalized_bounds,
+                this.normalizedBounds[0], // min_x
+                this.normalizedBounds[1], // min_y
+                this.normalizedBounds[2], // max_x
+                this.normalizedBounds[3]  // max_y
+            );
+        }
+
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+
+    updateParticlePosition() {
+        const gl = this.gl;
+        util.bindFramebuffer(gl, this.framebuffer, this.particleStateTexture1);
+        gl.viewport(0, 0, this.particleStateResolution, this.particleStateResolution);
+
+        const program = this.updatePositionProgram;
+        gl.useProgram(program.program);
+
+        util.bindAttribute(gl, this.quadBuffer, program.a_pos, 2);
+
+        gl.uniform1i(program.u_wind, 0);
+        gl.uniform1i(program.u_particles, 1);
+        gl.uniform1i(program.u_particle_speed, 3);
 
         gl.uniform1f(program.u_rand_seed, Math.random());
         gl.uniform2f(program.u_wind_res, this.windData.width, this.windData.height);
@@ -301,6 +371,11 @@ export default class WindGL {
         const temp = this.particleStateTexture0;
         this.particleStateTexture0 = this.particleStateTexture1;
         this.particleStateTexture1 = temp;
+        
+        // swap the particle speed textures so the new one becomes the current one
+        const tempSpeed = this.particleSpeedTexture0;
+        this.particleSpeedTexture0 = this.particleSpeedTexture1;
+        this.particleSpeedTexture1 = tempSpeed;
     }
 }
 

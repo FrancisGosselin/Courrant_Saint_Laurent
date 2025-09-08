@@ -1,13 +1,12 @@
 precision mediump float;
 
-
 varying vec2 v_particle_pos;
-
-// Convert normalized Y coordinate (0-1) back to latitude (-90 to 90) using inverse Web Mercator
+varying float v_speed_magnitude;
 
 void main() {
-
-
-
-    gl_FragColor = vec4(0.23, 0.23, 0.23, 0.35);
+    // Hide particles with zero speed by setting alpha to 0
+    // Use step function to avoid if statement: step(0.001, v_speed_magnitude) returns 0 if speed < 0.001, 1 otherwise
+    float alpha = step(0.05, v_speed_magnitude) * 0.35;
+    
+    gl_FragColor = vec4(0.23, 0.23, 0.23, alpha);
 }
