@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://francisgosselin.github.io/mapLibre_river_current_viewer",
+  "homepage": "https://francisgosselin.github.io/Courrant_Saint_Laurent",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

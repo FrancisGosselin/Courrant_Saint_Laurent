@@ -50,20 +50,20 @@ class WindGLLayer {
     // Add event handlers to clear background trails when map moves
     this.map.on('movestart', () => {
       this.scheduleClearBackground();
-      this.setMoving(true, false); // moving but not zooming
+      this.startMoving(true, false); // moving but not zooming
     });
     
     this.map.on('zoomstart', () => {
       this.scheduleClearBackground();
-      this.setMoving(true, true); // moving and zooming
+      this.startMoving(true, true); // moving and zooming
     });
     
     this.map.on('moveend', () => {
-      this.setMoving(false, false);
+      this.stopMoving(false, false);
     });
     
     this.map.on('zoomend', () => {
-      this.setMoving(false, false);
+      this.stopMoving(false, false);
     });
     
     // Store initial view state
@@ -87,24 +87,39 @@ class WindGLLayer {
     }
   }
   
-  setMoving(moving: boolean, zooming: boolean = false) {
+  startMoving(moving: boolean, zooming: boolean) {
     this.isMoving = moving;
     this.isZooming = zooming;
     
-    if (moving) {
-      // Clear any existing timeout
-      if (this.movingTimeout) {
-        clearTimeout(this.movingTimeout);
-        this.movingTimeout = null;
-      }
-    } else {
-      // Set a timeout to stop moving state after a short delay
-      this.movingTimeout = window.setTimeout(() => {
-        this.isMoving = false;
-        this.isZooming = false;
-      }, 500);
+
+    // Clear any existing timeout
+    if (this.movingTimeout) {
+      clearTimeout(this.movingTimeout);
+      this.movingTimeout = null;
     }
   }
+
+  stopMoving(moving: boolean, zooming: boolean) {
+
+    this.movingTimeout = window.setTimeout(() => {
+        this.isMoving = moving;
+        this.isZooming = zooming;
+
+        const bounds = this.map.getBounds();
+        const viewportBounds = [
+          bounds.getWest(),  // min_lng
+          bounds.getSouth(), // min_lat
+          bounds.getEast(),  // max_lng
+          bounds.getNorth()  // max_lat
+        ];
+        
+        this.windGL.setViewportBounds(viewportBounds);
+        
+      }, 5);
+
+  }
+
+
   
   hasViewStateChanged(): boolean {
     if (!this.lastViewState || !this.map) return false;
@@ -142,6 +157,7 @@ class WindGLLayer {
         this.windGL.windData = windData;
         this.windGL.windTexture = this.createTexture(this.windGL.gl, this.windGL.gl.LINEAR, windData.image);
         console.log('Wind data loaded successfully');
+        this.stopMoving(false, false);
       };
       
       windImage.onerror = () => {
@@ -184,14 +200,6 @@ class WindGLLayer {
     // Calculate and set viewport bounds for particle spawning
     if (this.map) {
       const bounds = this.map.getBounds();
-      const viewportBounds = [
-        bounds.getWest(),  // min_lng
-        bounds.getSouth(), // min_lat
-        bounds.getEast(),  // max_lng
-        bounds.getNorth()  // max_lat
-      ];
-      
-      this.windGL.setViewportBounds(viewportBounds);
       
       // Control trail rendering based on map movement state
       this.windGL.enableTrails = !this.isMoving && !this.isZooming;
@@ -205,14 +213,14 @@ class WindGLLayer {
       // Apply speed scaling (clamp between reasonable bounds)
       this.windGL.speedFactor = Math.min(Math.max(0.1 * speedScaleFactor, 0.05), 2.0);
       
-      // Set drop rate based on interaction type
-      if (this.isZooming) {
-        this.windGL.dropRate = 0.002; // Very high drop rate during zoom
-      } else if (this.isMoving) {
-        this.windGL.dropRate = 0.002; // Moderate drop rate during pan
-      } else {
-        this.windGL.dropRate = 0.002; // Normal drop rate
-      }
+      // // Set drop rate based on interaction type
+      // if (this.isZooming) {
+      //   this.windGL.dropRate = 0.002; // Very high drop rate during zoom
+      // } else if (this.isMoving) {
+      //   this.windGL.dropRate = 0.002; // Moderate drop rate during pan
+      // } else {
+      //   this.windGL.dropRate = 0.002; // Normal drop rate
+      // }
     }
     
     // WindGL works in screen space, not map projection space
@@ -289,11 +297,11 @@ const WorldMapWindGL: React.FC = () => {
     if (map) {
       // Load current data metadata
       try {
-        const response = await fetch('/Courrant_Saint_Laurent/data/current_data.json');
+        const response = await fetch('/Courrant_Saint_Laurent/data/current_data_0.json');
         const metadata = await response.json();
         
         // Preprocess the image to show magnitude with color gradient
-        const processedImageUrl = await imageProcessor.preprocessCurrentImage('/Courrant_Saint_Laurent/data/current_data.png', metadata);
+        const processedImageUrl = await imageProcessor.preprocessCurrentImage('/Courrant_Saint_Laurent/data/current_data_0.png', metadata);
         
         // Calculate bounds from metadata
         const minLng = metadata.minLong;

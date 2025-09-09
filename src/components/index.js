@@ -5,6 +5,8 @@ import drawVert from './shaders/draw.vert.glsl?raw';
 import drawFrag from './shaders/draw.frag.glsl?raw';
 
 import quadVert from './shaders/quad.vert.glsl?raw';
+import screenVert from './shaders/screen.vert.glsl?raw';
+import updateVert from './shaders/update.vert.glsl?raw';
 
 import screenFrag from './shaders/screen.frag.glsl?raw';
 import updateFrag from './shaders/update.frag.glsl?raw';
@@ -35,8 +37,8 @@ export default class WindGL {
         this.enableTrails = true; // Enable or disable particle trails
 
         this.drawProgram = util.createProgram(gl, drawVert, drawFrag);
-        this.screenProgram = util.createProgram(gl, quadVert, screenFrag);
-        this.updateProgram = util.createProgram(gl, quadVert, updateFrag);
+        this.screenProgram = util.createProgram(gl, screenVert, screenFrag);
+        this.updateProgram = util.createProgram(gl, updateVert, updateFrag);
 
         this.quadBuffer = util.createBuffer(gl, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]));
         this.framebuffer = gl.createFramebuffer();
@@ -224,6 +226,30 @@ export default class WindGL {
         util.bindTexture(gl, texture, 2);
         gl.uniform1i(program.u_screen, 2);
         gl.uniform1f(program.u_opacity, opacity);
+
+        // Pass normalized viewport bounds for correct positioning
+        if (this.normalizedBounds && program.u_viewport_normalized_bounds) {
+            gl.uniform4f(program.u_viewport_normalized_bounds,
+                this.normalizedBounds[0], // min_x
+                this.normalizedBounds[1], // min_y
+                this.normalizedBounds[2], // max_x
+                this.normalizedBounds[3]  // max_y
+            );
+        }
+        
+        // Pass the projection matrix for screen rendering
+        if (this.projectionMatrix && program.u_matrix) {
+            gl.uniformMatrix4fv(program.u_matrix, false, this.projectionMatrix);
+        } else {
+            // Fallback to identity matrix if no projection matrix provided
+            const identityMatrix = new Float32Array([
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1
+            ]);
+            gl.uniformMatrix4fv(program.u_matrix, false, identityMatrix);
+        }
 
         gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
