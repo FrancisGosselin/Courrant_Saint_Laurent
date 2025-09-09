@@ -207,7 +207,7 @@ export default class WindGL {
         gl.uniform2f(program.u_wind_min, this.windData.uMin, this.windData.vMin);
         gl.uniform2f(program.u_wind_max, this.windData.uMax, this.windData.vMax);
         
-        // Pass data bounds for wind data mapping
+        // Pass data bounds for wind data mapping (needed by vertex shader for wind lookup)
         if (this.windData && program.u_data_bounds) {
             gl.uniform4f(program.u_data_bounds,
                 this.windData.minLong || -180,     // minLong

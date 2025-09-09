@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import Map, { Marker, Popup } from 'react-map-gl/maplibre';
+import React, { useRef } from 'react';
+import Map from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { mat4 } from 'gl-matrix';
 
@@ -7,14 +7,14 @@ class ParticleLayer {
   id = 'null-island';
   type = 'custom';
   renderingMode = '2d';
-  program: WebGLProgram = null;
+  program: WebGLProgram | null = null;
   map: any = null;
   particleX = -180; // Start at left edge of world
   particleY = 0;    // Equator
   speed = 0.5;      // Degrees per frame
   trail: Array<{x: number, y: number, age: number}> = []; // Trail positions with age
   maxTrailLength = 20; // Maximum number of trail segments
-  vertexBuffer: WebGLBuffer = null;
+  vertexBuffer: WebGLBuffer | null = null;
   private isMoving = false;
   private resetTimeout: number | null = null;
 
@@ -50,6 +50,7 @@ class ParticleLayer {
         }`;
 
         const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+        if (!vertexShader) return;
         gl.shaderSource(vertexShader, vertexSource);
         gl.compileShader(vertexShader);
         
@@ -59,6 +60,7 @@ class ParticleLayer {
         }
 
         const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+        if (!fragmentShader) return;
         gl.shaderSource(fragmentShader, fragmentSource);
         gl.compileShader(fragmentShader);
         
@@ -68,6 +70,7 @@ class ParticleLayer {
         }
 
         this.program = gl.createProgram();
+        if (!this.program) return;
         gl.attachShader(this.program, vertexShader);
         gl.attachShader(this.program, fragmentShader);
         gl.linkProgram(this.program);
@@ -178,7 +181,7 @@ class ParticleLayer {
         // Only render if not moving to avoid visual artifacts
         if (!this.isMoving) {
             // Render trail segments with fading alpha
-            this.trail.forEach((segment, index) => {
+            this.trail.forEach((segment) => {
                 const alpha = 1.0 - (segment.age / this.maxTrailLength);
                 gl.uniform1f(gl.getUniformLocation(this.program, "u_alpha"), alpha * 0.8); // Trail is more transparent
                 gl.uniform2f(gl.getUniformLocation(this.program, "u_position"), segment.x + 90, segment.y + 90);
@@ -215,7 +218,7 @@ class ParticleLayer {
 }
 
 const WorldMap: React.FC = () => {
-  const mapRef = useRef();
+  const mapRef = useRef<any>();
   
   const handleMapLoad = () => {
     const map = mapRef.current?.getMap();

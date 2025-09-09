@@ -14,6 +14,7 @@ uniform vec4 u_data_bounds; // x: minLong, y: minLat, z: longPerPixel, w: latPer
 uniform vec4 u_viewport_normalized_bounds; // x: min_x, y: min_y, z: max_x, w: max_y
 
 varying vec2 v_tex_pos;
+const float PI = 3.1415926535897932384626433832795;
 
 // pseudo-random generator
 const vec3 rand_constants = vec3(12.9898, 78.233, 4375.85453);
@@ -25,8 +26,8 @@ float rand(const vec2 co) {
 // Convert normalized Y coordinate (0-1) back to latitude (-90 to 90) using inverse Web Mercator
 float yToLatitude(float y) {
     // Inverse Web Mercator transformation
-    float mercatorY = (0.5 - y) * 2.0 * 3.14159; // Convert 0-1 to mercator Y range
-    float lat_rad = 2.0 * atan(exp(mercatorY)) - 3.14159/2.0; // Inverse mercator formula
+    float mercatorY = (0.5 - y) * 2.0 * PI; // Convert 0-1 to mercator Y range
+    float lat_rad = 2.0 * atan(exp(mercatorY)) - PI/2.0; // Inverse mercator formula
     return degrees(lat_rad); // Convert radians to degrees
 }
 
@@ -37,7 +38,7 @@ vec2 latlong_coord_to_canvas_coord(float lng, float lat) {
     
     // Convert latitude using Web Mercator transformation
     float lat_rad = radians(lat);
-    float y = 0.5 - log(tan(3.14159/4.0 + lat_rad/2.0)) / (2.0 * 3.14159);
+    float y = 0.5 - log(tan(PI/4.0 + lat_rad/2.0)) / (2.0 * PI);
     
     return vec2(x, y);
 }
@@ -105,8 +106,10 @@ void main() {
     float speed_t = length(velocity) / length(u_wind_max);
 
     // take EPSG:4236 distortion into account for calculating where the particle moved
-    float distortion = cos(radians(pos.y * 180.0 - 90.0));
-    vec2 offset = vec2(velocity.x / distortion, -velocity.y) * 0.0001 * u_speed_factor;
+    // float distortion = cos(radians(pos.y * 180.0 - 90.0));
+    // vec2 offset = vec2(velocity.x / distortion, -velocity.y) * 0.0001 * u_speed_factor;
+
+    vec2 offset = vec2(velocity.x, -velocity.y) * 0.002 * u_speed_factor;
 
     // update particle position, wrapping around the date line
     pos = fract(1.0 + pos + offset);

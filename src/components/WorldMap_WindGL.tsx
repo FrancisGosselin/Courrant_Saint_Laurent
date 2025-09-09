@@ -1,14 +1,13 @@
-import React, { useState, useRef } from 'react';
-import Map, { Marker, Popup } from 'react-map-gl/maplibre';
+import React, { useRef } from 'react';
+import {Map, Marker} from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { mat4 } from 'gl-matrix';
 import WindGL from './index.js';
 
 class WindGLLayer {
   id = 'wind-layer';
   type = 'custom';
   renderingMode = '2d';
-  windGL: WindGL = null;
+  windGL: WindGL | null = null;
   map: any = null;
   private lastViewState: any = null;
   private clearBackgroundTimeout: number | null = null;
@@ -278,7 +277,7 @@ class WindGLLayer {
 }
 
 const WorldMapWindGL: React.FC = () => {
-  const mapRef = useRef();
+  const mapRef = useRef<any>();
   
   const preprocessCurrentImage = async (imageUrl: string, metadata: any): Promise<string> => {
     return new Promise((resolve) => {
@@ -358,8 +357,8 @@ const WorldMapWindGL: React.FC = () => {
         // Calculate bounds from metadata
         const minLng = metadata.minLong;
         const minLat = metadata.minLat;
-        const maxLng = minLng + (metadata.width * metadata.longPerPixel);
-        const maxLat = minLat + (metadata.height * metadata.latPerPixel);
+        const maxLng = metadata.maxLong;
+        const maxLat = metadata.maxLat;
         
         // Add raster source for current data (using processed image)
         map.addSource('current-data', {
@@ -421,7 +420,8 @@ const WorldMapWindGL: React.FC = () => {
         onResize={handleResize}
         renderWorldCopies={false}
       >
-       
+       <Marker longitude={-72.6} latitude={46.0} color="red" />
+       <Marker longitude={-69.8376} latitude={49.0} color="red" />
       </Map>
     </div>
   );
