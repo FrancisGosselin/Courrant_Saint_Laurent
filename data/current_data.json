@@ -1,0 +1,16 @@
+{
+  "source": "Ocean currents data",
+  "date": "2025-09-08T18:41:29Z",
+  "width": 1150,
+  "height": 1400,
+  "uMin": -1.9969999999999999,
+  "uMax": 2.629,
+  "vMin": -1.3900000000000001,
+  "vMax": 3.022,
+  "minLat": 46.0,
+  "maxLat": 49.5,
+  "latPerPixel": 0.0025,
+  "minLong": -72.6,
+  "maxLong": -68.0,
+  "longPerPixel": 0.003999999999999995
+}
