@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import {Map, Marker} from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import WindGL from './index.js';
+import ImageProcessor from './ImageProcessor';
 
 class WindGLLayer {
   id = 'wind-layer';
@@ -129,7 +130,7 @@ class WindGLLayer {
   async loadWindData() {
     try {
       // Fetch wind data JSON
-      const response = await fetch('/src/components/data/current_data.json');
+      const response = await fetch('/Courrant_Saint_Laurent/data/current_data.json');
       const windData = await response.json();
       
       // Create and load wind image
@@ -147,7 +148,7 @@ class WindGLLayer {
         console.error('Failed to load wind image');
       };
       
-      windImage.src = '/src/components/data/current_data.png';
+      windImage.src = '/Courrant_Saint_Laurent/data/current_data.png';
       
     } catch (error) {
       console.error('Failed to load wind data:', error);
@@ -192,6 +193,9 @@ class WindGLLayer {
       
       this.windGL.setViewportBounds(viewportBounds);
       
+      // Control trail rendering based on map movement state
+      this.windGL.enableTrails = !this.isMoving && !this.isZooming;
+      
       // Calculate speed factor based on zoom level (viewport size)
       // Use longitude range since it's linear even in Web Mercator
       const lngRange = Math.abs(bounds.getEast() - bounds.getWest());
@@ -203,9 +207,9 @@ class WindGLLayer {
       
       // Set drop rate based on interaction type
       if (this.isZooming) {
-        this.windGL.dropRate = 0.1; // Very high drop rate during zoom
+        this.windGL.dropRate = 0.002; // Very high drop rate during zoom
       } else if (this.isMoving) {
-        this.windGL.dropRate = 0.05; // Moderate drop rate during pan
+        this.windGL.dropRate = 0.002; // Moderate drop rate during pan
       } else {
         this.windGL.dropRate = 0.002; // Normal drop rate
       }
@@ -278,81 +282,18 @@ class WindGLLayer {
 
 const WorldMapWindGL: React.FC = () => {
   const mapRef = useRef<any>();
-  
-  const preprocessCurrentImage = async (imageUrl: string, metadata: any): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d')!;
-        
-        canvas.width = img.width;
-        canvas.height = img.height;
-        
-        // Draw original image
-        ctx.drawImage(img, 0, 0);
-        
-        // Get image data for pixel manipulation
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        
-        // Create a new array for the flipped and processed image
-        const processedData = new Uint8ClampedArray(data.length);
-        
-        // Process and flip each pixel
-        for (let y = 0; y < canvas.height; y++) {
-          for (let x = 0; x < canvas.width; x++) {
-            const srcIdx = (y * canvas.width + x) * 4;
-            const dstIdx = ((canvas.height - 1 - y) * canvas.width + x) * 4; // Flip vertically
-            
-            const redValue = data[srcIdx];     // u component (0-255)
-            const greenValue = data[srcIdx + 1]; // v component (0-255)
-            
-            // Convert back to original u,v values using metadata
-            const u = (redValue / 255.0) * (metadata.uMax - metadata.uMin) + metadata.uMin;
-            const v = (greenValue / 255.0) * (metadata.vMax - metadata.vMin) + metadata.vMin;
-            
-            // Calculate magnitude: sqrt(u² + v²)
-            const magnitude = Math.sqrt(u * u + v * v);
-            
-            // Find the max possible magnitude for normalization
-            const maxMagnitude = Math.sqrt(
-              Math.max(Math.abs(metadata.uMin), Math.abs(metadata.uMax)) ** 2 +
-              Math.max(Math.abs(metadata.vMin), Math.abs(metadata.vMax)) ** 2
-            );
-            
-            // Normalize magnitude to 0-255 and set as red value
-            const normalizedMagnitude = Math.min(255, Math.floor((magnitude / maxMagnitude) * 255));
-            
-            processedData[dstIdx] = normalizedMagnitude;     // R = magnitude
-            processedData[dstIdx + 1] = 0;                   // G = 0
-            processedData[dstIdx + 2] = 0;                   // B = 0
-            processedData[dstIdx + 3] = data[srcIdx + 3];    // A = keep original alpha
-          }
-        }
-        
-        // Apply processed and flipped data
-        const processedImageData = new ImageData(processedData, canvas.width, canvas.height);
-        ctx.putImageData(processedImageData, 0, 0);
-        
-        // Return processed image as data URL
-        resolve(canvas.toDataURL());
-      };
-      img.src = imageUrl;
-    });
-  };
+  const imageProcessor = new ImageProcessor();
 
   const handleMapLoad = async () => {
     const map = mapRef.current?.getMap();
     if (map) {
       // Load current data metadata
       try {
-        const response = await fetch('/src/components/data/current_data.json');
+        const response = await fetch('/Courrant_Saint_Laurent/data/current_data.json');
         const metadata = await response.json();
         
-        // Preprocess the image to show magnitude in red channel
-        const processedImageUrl = await preprocessCurrentImage('/src/components/data/current_data.png', metadata);
+        // Preprocess the image to show magnitude with color gradient
+        const processedImageUrl = await imageProcessor.preprocessCurrentImage('/Courrant_Saint_Laurent/data/current_data.png', metadata);
         
         // Calculate bounds from metadata
         const minLng = metadata.minLong;
@@ -420,8 +361,6 @@ const WorldMapWindGL: React.FC = () => {
         onResize={handleResize}
         renderWorldCopies={false}
       >
-       <Marker longitude={-72.6} latitude={46.0} color="red" />
-       <Marker longitude={-69.8376} latitude={49.0} color="red" />
       </Map>
     </div>
   );

@@ -26,10 +26,13 @@ export default class WindGL {
 
         // Remove the problematic setWind call - will be handled externally
 
-        this.fadeOpacity = 0.996; // how fast the particle trails fade on each frame
+        this.fadeOpacity = 0.90; // how fast the particle trails fade on each frame
         this.speedFactor = 0.25; // how fast the particles move
         this.dropRate = 0.003; // how often the particles move to a random place
         this.dropRateBump = 0.01; // drop rate increase relative to individual particle speed
+        
+        // Trail rendering control
+        this.enableTrails = true; // Enable or disable particle trails
 
         this.drawProgram = util.createProgram(gl, drawVert, drawFrag);
         this.screenProgram = util.createProgram(gl, quadVert, screenFrag);
@@ -164,17 +167,52 @@ export default class WindGL {
         util.bindTexture(gl, this.windTexture, 0);
         util.bindTexture(gl, this.particleStateTexture0, 1);
 
-        this.drawScreen();
+        // Use trail rendering based on enableTrails flag
+        if (this.enableTrails) {
+            this.drawScreenWithTrail();
+        } else {
+            this.drawScreen();
+        }
         this.updateParticles();
     }
 
-    drawScreen() {
+     drawScreen() {
         const gl = this.gl;
         // Disable trail rendering - just draw particles directly without background accumulation
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         this.drawParticles();
         gl.disable(gl.BLEND);
+    }
+
+    drawScreenWithTrail() {
+        const gl = this.gl;
+        // draw the screen into a temporary framebuffer to retain it as the background on the next frame
+        util.bindFramebuffer(gl, this.framebuffer, this.screenTexture);
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+        // Clear to black for proper fading effect
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // Draw faded background with blending enabled
+
+        this.drawTexture(this.backgroundTexture, this.fadeOpacity);
+        
+        // Draw new particles at full brightness
+        this.drawParticles();
+
+        util.bindFramebuffer(gl, null);
+        // enable blending to support drawing on top of an existing background (e.g. a map)
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        this.drawTexture(this.screenTexture, 1.0);
+        gl.disable(gl.BLEND);
+
+        // save the current screen as the background for the next frame
+        const temp = this.backgroundTexture;
+        this.backgroundTexture = this.screenTexture;
+        this.screenTexture = temp;
     }
 
     drawTexture(texture, opacity) {
