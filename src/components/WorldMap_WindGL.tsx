@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import {Map, Marker} from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import WindGL from './index.js';
@@ -32,8 +32,13 @@ class WindGLLayer {
     this.windGL.numParticles = 50000; // Higher particle count for better coverage
     this.windGL.fadeOpacity = 0.985; // Not used without trails, but keep for consistency
     this.windGL.speedFactor = 0.12; // Slower, more visible movement
-    this.windGL.dropRate = 0.002; // Moderate particle respawn
+    this.windGL.dropRate = 0.005; // Moderate particle respawn
     this.windGL.dropRateBump = 0.008; // Balanced speed-based respawn rate
+    
+    // Configure particle culling parameters for dense areas
+    this.windGL.compactMargin = 0.1; // margin for sampling surrounding wind
+    this.windGL.compactThreshold = 0.05; // threshold for determining windy areas  
+    this.windGL.dropCompactedRate = 0.9; // 70% chance to kill particles in windy areas
     
     // Load wind data
     this.loadWindData();
@@ -49,21 +54,25 @@ class WindGLLayer {
     
     // Add event handlers to clear background trails when map moves
     this.map.on('movestart', () => {
+      this.isMoving = true;
       this.scheduleClearBackground();
-      this.startMoving(true, false); // moving but not zooming
+      this.startMoving(); // moving but not zooming
     });
     
     this.map.on('zoomstart', () => {
+      this.isZooming = true;
       this.scheduleClearBackground();
-      this.startMoving(true, true); // moving and zooming
+      this.startMoving(); // moving and zooming
     });
     
     this.map.on('moveend', () => {
-      this.stopMoving(false, false);
+      this.isMoving = false;
+      this.stopMoving();
     });
     
     this.map.on('zoomend', () => {
-      this.stopMoving(false, false);
+      this.isZooming = false;
+      this.stopMoving();
     });
     
     // Store initial view state
@@ -87,10 +96,7 @@ class WindGLLayer {
     }
   }
   
-  startMoving(moving: boolean, zooming: boolean) {
-    this.isMoving = moving;
-    this.isZooming = zooming;
-    
+  startMoving() {
 
     // Clear any existing timeout
     if (this.movingTimeout) {
@@ -99,24 +105,26 @@ class WindGLLayer {
     }
   }
 
-  stopMoving(moving: boolean, zooming: boolean) {
+  stopMoving() {
 
-    this.movingTimeout = window.setTimeout(() => {
-        this.isMoving = moving;
-        this.isZooming = zooming;
+    if(!this.isMoving && !this.isZooming) {
+      this.movingTimeout = window.setTimeout(() => {
+        this.resetViewpostBounds();
+      }, 1);
+    }
 
-        const bounds = this.map.getBounds();
-        const viewportBounds = [
-          bounds.getWest(),  // min_lng
-          bounds.getSouth(), // min_lat
-          bounds.getEast(),  // max_lng
-          bounds.getNorth()  // max_lat
-        ];
-        
-        this.windGL.setViewportBounds(viewportBounds);
-        
-      }, 5);
+  }
 
+  resetViewpostBounds(){
+    const bounds = this.map.getBounds();
+    const viewportBounds = [
+      bounds.getWest(),  // min_lng
+      bounds.getSouth(), // min_lat
+      bounds.getEast(),  // max_lng
+      bounds.getNorth()  // max_lat
+    ];
+    
+    this.windGL.setViewportBounds(viewportBounds);
   }
 
 
@@ -142,10 +150,10 @@ class WindGLLayer {
     );
   }
   
-  async loadWindData() {
+  async loadWindData(dataIndex: number = 0) {
     try {
       // Fetch wind data JSON
-      const response = await fetch('/Courrant_Saint_Laurent/data/current_data.json');
+      const response = await fetch(`/Courrant_Saint_Laurent/data/current_data_${dataIndex}.json`);
       const windData = await response.json();
       
       // Create and load wind image
@@ -156,18 +164,18 @@ class WindGLLayer {
         windData.image = windImage;
         this.windGL.windData = windData;
         this.windGL.windTexture = this.createTexture(this.windGL.gl, this.windGL.gl.LINEAR, windData.image);
-        console.log('Wind data loaded successfully');
-        this.stopMoving(false, false);
+        console.log(`Wind data ${dataIndex} loaded successfully`);
+        this.stopMoving();
       };
       
       windImage.onerror = () => {
-        console.error('Failed to load wind image');
+        console.error(`Failed to load wind image ${dataIndex}`);
       };
       
-      windImage.src = '/Courrant_Saint_Laurent/data/current_data.png';
+      windImage.src = `/Courrant_Saint_Laurent/data/current_data_${dataIndex}.png`;
       
     } catch (error) {
-      console.error('Failed to load wind data:', error);
+      console.error(`Failed to load wind data ${dataIndex}:`, error);
     }
   }
   
@@ -188,6 +196,7 @@ class WindGLLayer {
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, modelViewProjectionMatrix: Float32Array) {
+    
     if (!this.windGL) return;
 
     // Store current GL state
@@ -283,6 +292,8 @@ class WindGLLayer {
     // Handle canvas resize
     if (this.windGL) {
       this.windGL.resize();
+      this.windGL.resetParticles();
+      this.resetViewpostBounds();
       // Particles will automatically be positioned correctly with the new viewport
     }
   }
@@ -291,17 +302,19 @@ class WindGLLayer {
 const WorldMapWindGL: React.FC = () => {
   const mapRef = useRef<any>();
   const imageProcessor = new ImageProcessor();
+  const [dataIndex, setDataIndex] = useState<number>(0);
+  const windLayerRef = useRef<WindGLLayer | null>(null);
 
-  const handleMapLoad = async () => {
+  const loadDataForIndex = useCallback(async (index: number) => {
     const map = mapRef.current?.getMap();
     if (map) {
       // Load current data metadata
       try {
-        const response = await fetch('/Courrant_Saint_Laurent/data/current_data_0.json');
+        const response = await fetch(`/Courrant_Saint_Laurent/data/current_data_${index}.json`);
         const metadata = await response.json();
         
         // Preprocess the image to show magnitude with color gradient
-        const processedImageUrl = await imageProcessor.preprocessCurrentImage('/Courrant_Saint_Laurent/data/current_data_0.png', metadata);
+        const processedImageUrl = await imageProcessor.preprocessCurrentImage(`/Courrant_Saint_Laurent/data/current_data_${index}.png`, metadata);
         
         // Calculate bounds from metadata
         const minLng = metadata.minLong;
@@ -309,35 +322,64 @@ const WorldMapWindGL: React.FC = () => {
         const maxLng = metadata.maxLong;
         const maxLat = metadata.maxLat;
         
-        // Add raster source for current data (using processed image)
-        map.addSource('current-data', {
-          type: 'image',
-          url: processedImageUrl, // Use processed image
-          coordinates: [
-            [minLng, maxLat], // top left
-            [maxLng, maxLat], // top right
-            [maxLng, minLat], // bottom right
-            [minLng, minLat]  // bottom left
-          ]
-        });
+        // Update or add raster source for current data (using processed image)
+        if (map.getSource('current-data')) {
+          (map.getSource('current-data') as any).updateImage({
+            url: processedImageUrl,
+            coordinates: [
+              [minLng, maxLat], // top left
+              [maxLng, maxLat], // top right
+              [maxLng, minLat], // bottom right
+              [minLng, minLat]  // bottom left
+            ]
+          });
+        } else {
+          map.addSource('current-data', {
+            type: 'image',
+            url: processedImageUrl,
+            coordinates: [
+              [minLng, maxLat], // top left
+              [maxLng, maxLat], // top right
+              [maxLng, minLat], // bottom right
+              [minLng, minLat]  // bottom left
+            ]
+          });
+        }
         
-        // Add raster layer
-        map.addLayer({
-          id: 'current-data-layer',
-          type: 'raster',
-          source: 'current-data',
-          paint: {
-            'raster-opacity': 0.6, // Make it semi-transparent
-            'raster-fade-duration': 300
-          }
-        });
+        // Add raster layer if it doesn't exist
+        if (!map.getLayer('current-data-layer')) {
+          map.addLayer({
+            id: 'current-data-layer',
+            type: 'raster',
+            source: 'current-data',
+            paint: {
+              'raster-opacity': 0.6,
+              'raster-fade-duration': 300
+            }
+          });
+        }
+        
+        // Update WindGL layer data
+        if (windLayerRef.current) {
+          windLayerRef.current.loadWindData(index);
+        }
         
       } catch (error) {
-        console.error('Failed to load current data metadata:', error);
+        console.error(`Failed to load current data metadata for index ${index}:`, error);
       }
+    }
+  }, [imageProcessor]);
+
+  const handleMapLoad = async () => {
+    const map = mapRef.current?.getMap();
+    if (map) {
+      // Create and add WindGL layer
+      const windLayer = new WindGLLayer();
+      windLayerRef.current = windLayer;
+      map.addLayer(windLayer);
       
-      // Add WindGL layer on top (this will use the original image)
-      map.addLayer(new WindGLLayer());
+      // Load initial data
+      loadDataForIndex(dataIndex);
     }
   };
 
@@ -354,8 +396,14 @@ const WorldMapWindGL: React.FC = () => {
     }
   };
 
+  const handleSliderChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const newIndex = parseInt(event.target.value);
+    setDataIndex(newIndex);
+    loadDataForIndex(newIndex);
+  }, [loadDataForIndex]);
+
   return (
-    <div style={{ height: '100vh', width: '100%' }}>
+    <div style={{ height: '100vh', width: '100%', position: 'relative' }}>
       <Map
         ref={mapRef}
         initialViewState={{
@@ -370,6 +418,132 @@ const WorldMapWindGL: React.FC = () => {
         renderWorldCopies={false}
       >
       </Map>
+      <div style={{
+        position: 'absolute',
+        top: '20px',
+        right: '20px',
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+        padding: '20px',
+        borderRadius: '12px',
+        color: 'white',
+        zIndex: 1000,
+        minWidth: '280px',
+        backdropFilter: 'blur(8px)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
+      }}>
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ 
+            display: 'block', 
+            fontSize: '16px', 
+            fontWeight: '600',
+            marginBottom: '4px',
+            background: 'linear-gradient(135deg, #64B5F6, #42A5F5)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent'
+          }}>
+            Courrant de surface
+          </label>
+          <div style={{ 
+            fontSize: '14px', 
+            color: '#94A3B8',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>9 septembre 2025</span>
+            <span style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              color: '#F1F5F9'
+            }}>
+              {dataIndex >= 5 ? `${String(dataIndex - 5).padStart(2, '0')}:00` : `${String(dataIndex + 19).padStart(2, '0')}:00`}
+            </span>
+          </div>
+        </div>
+        
+        <div style={{ position: 'relative', marginBottom: '16px' }}>
+          <input
+            type="range"
+            min="0"
+            max="13"
+            value={dataIndex}
+            onChange={handleSliderChange}
+            style={{
+              width: '100%',
+              height: '6px',
+              background: `linear-gradient(to right, 
+                #1E293B 0%, 
+                #1E293B ${(dataIndex / 13) * 100}%, 
+                #3B82F6 ${(dataIndex / 13) * 100}%, 
+                #60A5FA 100%)`,
+              borderRadius: '3px',
+              outline: 'none',
+              cursor: 'pointer',
+              appearance: 'none',
+              WebkitAppearance: 'none'
+            }}
+          />
+          <style>{`
+            input[type="range"]::-webkit-slider-thumb {
+              appearance: none;
+              width: 20px;
+              height: 20px;
+              border-radius: 50%;
+              background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+              cursor: pointer;
+              border: 2px solid #F1F5F9;
+              box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+              transition: all 0.2s ease;
+            }
+            input[type="range"]::-webkit-slider-thumb:hover {
+              transform: scale(1.1);
+              box-shadow: 0 4px 12px rgba(59, 130, 246, 0.6);
+            }
+            input[type="range"]::-moz-range-thumb {
+              width: 20px;
+              height: 20px;
+              border-radius: 50%;
+              background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+              cursor: pointer;
+              border: 2px solid #F1F5F9;
+              box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+              transition: all 0.2s ease;
+            }
+            input[type="range"]::-moz-range-thumb:hover {
+              transform: scale(1.1);
+              box-shadow: 0 4px 12px rgba(59, 130, 246, 0.6);
+            }
+          `}</style>
+        </div>
+        
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          fontSize: '10px',
+          color: '#64748B',
+          position: 'relative'
+        }}>
+          {Array.from({ length: 14 }, (_, i) => (
+            <div key={i} style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              opacity: i === dataIndex ? 1 : 0.5,
+              transition: 'opacity 0.2s ease'
+            }}>
+              <div style={{ 
+                width: '2px', 
+                height: '6px', 
+                backgroundColor: i === dataIndex ? '#3B82F6' : '#475569',
+                marginBottom: '4px',
+                borderRadius: '1px'
+              }} />
+              <span>{String(i).padStart(2, '0')}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };

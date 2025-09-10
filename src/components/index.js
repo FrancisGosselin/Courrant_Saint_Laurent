@@ -33,6 +33,11 @@ export default class WindGL {
         this.dropRate = 0.003; // how often the particles move to a random place
         this.dropRateBump = 0.01; // drop rate increase relative to individual particle speed
         
+        // Particle culling parameters for dense areas
+        this.compactMargin = 0.05; // margin for sampling surrounding wind in is_compact function
+        this.compactThreshold = 0.05; // threshold for determining if area is windy/compact
+        this.dropCompactedRate = 0.9; // rate at which particles are culled in compact areas (0.9 = 90% chance to kill)
+        
         // Trail rendering control
         this.enableTrails = true; // Enable or disable particle trails
 
@@ -104,6 +109,13 @@ export default class WindGL {
         const max_y = 0.5 - Math.log(Math.tan(Math.PI/4.0 + south_rad/2.0)) / (2.0 * Math.PI);
         
         this.normalizedBounds = [min_x, min_y, max_x, max_y];
+
+        // A soft reset of particules
+        let temp = this.dropRate;
+        this.dropRate = 1.0;
+        this.updateParticles();
+        this.dropRate = temp;
+
     }
 
     resetParticles() {
@@ -328,6 +340,9 @@ export default class WindGL {
         gl.uniform1f(program.u_speed_factor, this.speedFactor);
         gl.uniform1f(program.u_drop_rate, this.dropRate);
         gl.uniform1f(program.u_drop_rate_bump, this.dropRateBump);
+        gl.uniform1f(program.u_compact_margin, this.compactMargin);
+        gl.uniform1f(program.u_compact_threshold, this.compactThreshold);
+        gl.uniform1f(program.u_drop_compacted_rate, this.dropCompactedRate);
         
         // Pass viewport bounds for particle spawning
         if (this.viewportBounds && program.u_viewport_bounds) {
@@ -358,6 +373,9 @@ export default class WindGL {
                 this.normalizedBounds[3]  // max_y
             );
         }
+        
+        // Pass particle culling parameters
+
 
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 

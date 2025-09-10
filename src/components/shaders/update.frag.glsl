@@ -12,6 +12,9 @@ uniform float u_drop_rate_bump;
 uniform vec4 u_viewport_bounds; // x: min_lng, y: min_lat, z: max_lng, w: max_lat
 uniform vec4 u_data_bounds; // x: minLong, y: minLat, z: longPerPixel, w: latPerPixel
 uniform vec4 u_viewport_normalized_bounds; // x: min_x, y: min_y, z: max_x, w: max_y
+uniform float u_compact_margin;
+uniform float u_compact_threshold;
+uniform float u_drop_compacted_rate;
 
 varying vec2 v_tex_pos;
 const float PI = 3.1415926535897932384626433832795;
@@ -54,9 +57,9 @@ vec2 to_canvas_coord(vec2 normalized_coord) {
 // current speed lookup; use manual bilinear filtering based on 4 adjacent pixels for smooth interpolation
 vec2 lookup_wind(const vec2 uv) {
     // Convert longitude (linear) and latitude (Web Mercator inverse) to geographic coordinates
-    float lng = uv.x * 360.0 - 180.0;  // 0-1 -> -180 to 180
-    float lat = yToLatitude(uv.y);     // 0-1 -> -90 to 90 using inverse Web Mercator
-    
+    if((uv.x == 0.0) && (uv.y == 0.0)){
+        return vec2(0.0, 0.0);
+    }
     // Get data bounds
     float minLng = u_data_bounds.x;
     float minLat = u_data_bounds.y;
@@ -95,6 +98,16 @@ vec2 lookup_wind(const vec2 uv) {
     return mix(u_wind_min, u_wind_max, velocity);
 }
 
+float is_compact(vec2 pos) {
+    vec2 wind_pos1 = lookup_wind(pos + vec2(u_compact_margin, 0.0));
+    vec2 wind_pos2 = lookup_wind(pos - vec2(u_compact_margin, 0.0));
+    vec2 wind_pos3 = lookup_wind(pos + vec2(0.0, u_compact_margin));
+    vec2 wind_pos4 = lookup_wind(pos - vec2(0.0, u_compact_margin));
+
+    float surround_wind = length(wind_pos1) + length(wind_pos2) + length(wind_pos3) + length(wind_pos4);
+    return step(u_compact_threshold, surround_wind);
+}
+
 void main() {
     vec4 color = texture2D(u_particles, v_tex_pos);
     vec2 pos = vec2(
@@ -123,10 +136,22 @@ void main() {
 
 
     vec2 random_pos =  vec2(rand(seed + 1.3), rand(seed + 2.1));
+    if (drop > 0.0){
+        float compacted = is_compact(random_pos);
+
+        float drop_compacted = step((1.0-u_drop_compacted_rate), compacted*rand(seed + 1.56));
+
+        // If the view is to compact, to avoid overwhelming amount of particules, respawn some of the off the screen
+        vec2 off_screen_pos = vec2(0.0, 0.0 );
+
+        random_pos = mix(random_pos, off_screen_pos, drop_compacted);
+    }
     // vec2 random_pos = vec2(
     //     mix(min_x, max_x, rand(seed + 1.3)),
     //     mix(min_y, max_y, rand(seed + 2.1)));
     pos = mix(pos, random_pos, drop);
+
+    
 
     // encode the new particle position back into RGBA
     gl_FragColor = vec4(
