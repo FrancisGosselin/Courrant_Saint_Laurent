@@ -4,7 +4,7 @@ Une application de visualisation interactive des courants d'eau dans le fleuve S
 
 ## Démo
 
-🌊 [Voir la démo en ligne](https://francisgosselin.github.io/Courrant_Saint_Laurent/)
+🌊 [Voir la démo en ligne](https://francisgosselin.github.io/Courant_Saint_Laurent/)
 
 ## Fonctionnalités
 

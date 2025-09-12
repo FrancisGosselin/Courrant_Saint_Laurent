@@ -153,7 +153,7 @@ class WindGLLayer {
   async loadWindData(dataIndex: number = 0) {
     try {
       // Fetch wind data JSON
-      const response = await fetch(`/Courrant_Saint_Laurent/data/current_data_${dataIndex}.json`);
+      const response = await fetch(`/Courant_Saint_Laurent/data/current_data_${dataIndex}.json`);
       const windData = await response.json();
       
       // Create and load wind image
@@ -172,7 +172,7 @@ class WindGLLayer {
         console.error(`Failed to load wind image ${dataIndex}`);
       };
       
-      windImage.src = `/Courrant_Saint_Laurent/data/current_data_${dataIndex}.png`;
+      windImage.src = `/Courant_Saint_Laurent/data/current_data_${dataIndex}.png`;
       
     } catch (error) {
       console.error(`Failed to load wind data ${dataIndex}:`, error);
@@ -302,11 +302,11 @@ const WorldMapWindGL: React.FC = () => {
     if (map) {
       // Load current data metadata
       try {
-        const response = await fetch(`/Courrant_Saint_Laurent/data/current_data_${index}.json`);
+        const response = await fetch(`/Courant_Saint_Laurent/data/current_data_${index}.json`);
         const metadata = await response.json();
         
         // Preprocess the image to show magnitude with color gradient
-        const processedImageUrl = await imageProcessor.preprocessCurrentImage(`/Courrant_Saint_Laurent/data/current_data_${index}.png`, metadata);
+        const processedImageUrl = await imageProcessor.preprocessCurrentImage(`/Courant_Saint_Laurent/data/current_data_${index}.png`, metadata);
         
         // Calculate bounds from metadata
         const minLng = metadata.minLong;

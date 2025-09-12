@@ -3,7 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://francisgosselin.github.io/Courrant_Saint_Laurent",
+  "homepage": "https://francisgosselin.github.io/Courant_Saint_Laurent",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FrancisGosselin/Courant_Saint_Laurent.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
