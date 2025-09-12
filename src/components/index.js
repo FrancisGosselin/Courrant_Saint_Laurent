@@ -110,15 +110,19 @@ export default class WindGL {
         
         this.normalizedBounds = [min_x, min_y, max_x, max_y];
 
+        this.resetParticulesSoft();
+
+    }
+
+    resetParticulesSoft(){
         // A soft reset of particules
         let temp = this.dropRate;
         this.dropRate = 1.0;
         this.updateParticles();
         this.dropRate = temp;
-
     }
 
-    resetParticles() {
+    resetParticlesForce() {
         const gl = this.gl;
         
         if (!this.particleStateTexture0 || !this.particleStateTexture1) {

@@ -222,14 +222,6 @@ class WindGLLayer {
       // Apply speed scaling (clamp between reasonable bounds)
       this.windGL.speedFactor = Math.min(Math.max(0.1 * speedScaleFactor, 0.05), 2.0);
       
-      // // Set drop rate based on interaction type
-      // if (this.isZooming) {
-      //   this.windGL.dropRate = 0.002; // Very high drop rate during zoom
-      // } else if (this.isMoving) {
-      //   this.windGL.dropRate = 0.002; // Moderate drop rate during pan
-      // } else {
-      //   this.windGL.dropRate = 0.002; // Normal drop rate
-      // }
     }
     
     // WindGL works in screen space, not map projection space
@@ -408,8 +400,8 @@ const WorldMapWindGL: React.FC = () => {
         ref={mapRef}
         initialViewState={{
           longitude: -70,
-          latitude: 47,
-          zoom: 7
+          latitude: 47.5,
+          zoom: 8
         }}
         style={{ width: '100%', height: '100%' }}
         mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
@@ -442,7 +434,7 @@ const WorldMapWindGL: React.FC = () => {
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent'
           }}>
-            Courrant de surface
+            Courants de surface
           </label>
           <div style={{ 
             fontSize: '14px', 
